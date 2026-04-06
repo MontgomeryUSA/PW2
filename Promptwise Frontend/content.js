@@ -444,7 +444,9 @@
   );
   const autoToggles = Array.from(root.querySelectorAll('[data-auto-toggle]'));
   const layoutMenus = Array.from(root.querySelectorAll('[data-layout-menu]'));
+  const originalDisplays = Array.from(root.querySelectorAll('[data-display="original"]'));
   const copyImage = copy.querySelector('.copyPhoto');
+  const ORIGINAL_PLACEHOLDER = 'Paste your prompt here...';
 
   function getOutputValue() {
     return (output.textContent || '').trim();
@@ -495,8 +497,23 @@
     });
   }
 
-  function renderOriginalPrompt(value, fallback = 'Paste your prompt here...') {
-    setDisplay('original', value.trim() || fallback);
+  function getOriginalPromptValue() {
+    const activeDisplay = document.activeElement?.matches?.('[data-display="original"]')
+      ? document.activeElement
+      : null;
+    const source = activeDisplay || originalDisplays[0];
+    if (!source) return '';
+
+    const value = (source.textContent || '').trim();
+    return value === ORIGINAL_PLACEHOLDER ? '' : value;
+  }
+
+  function renderOriginalPrompt(value, fallback = ORIGINAL_PLACEHOLDER) {
+    const safeValue = value.trim() || fallback;
+    root.querySelectorAll('[data-display="original"]').forEach((element) => {
+      if (element === document.activeElement) return;
+      element.textContent = safeValue;
+    });
   }
 
   function renderRewrittenPrompt(value, fallback = 'Improved prompt appears here...') {
@@ -687,6 +704,35 @@
     showFeedback('Improved prompt applied to the page editor.', true);
   }
 
+  async function analyzeFromChosenSource() {
+    const composer = getPromptComposer();
+    const websitePrompt = composer?.getValue().trim() || '';
+    const prompt = state.autoInterceptEnabled && websitePrompt ? websitePrompt : getOriginalPromptValue();
+    if (!prompt) return;
+
+    try {
+      renderOriginalPrompt(prompt);
+      setOutputValue('', 'Generating improved prompt...');
+      renderRewrittenPrompt('', 'Generating improved prompt...');
+      setActionState(true);
+      showFeedback('Generating improved prompt...', true);
+
+      const { rewrittenPrompt } = await runAnalysis(prompt);
+      if (!rewrittenPrompt) throw new Error('No improved prompt returned.');
+      showFeedback(
+        state.autoInterceptEnabled && websitePrompt
+          ? 'Improved prompt generated from the website prompt box.'
+          : 'Improved prompt generated from Promptwise input.',
+        true
+      );
+    } catch (error) {
+      setOutputValue('');
+      renderRewrittenPrompt('');
+      setActionState(false);
+      showFeedback(error.message || 'Could not improve prompt.', true);
+    }
+  }
+
   async function interceptAndImprove(event) {
     if (!state.autoInterceptEnabled) return;
 
@@ -736,10 +782,39 @@
   }
 
   resetMetrics();
+  originalDisplays.forEach((element) => {
+    element.setAttribute('contenteditable', 'plaintext-only');
+    element.setAttribute('spellcheck', 'false');
+    element.textContent = ORIGINAL_PLACEHOLDER;
+  });
   renderOriginalPrompt('');
   renderRewrittenPrompt('');
   syncAutoToggleUi();
   setActionState(false);
+
+  originalDisplays.forEach((element) => {
+    element.addEventListener('focus', () => {
+      if ((element.textContent || '').trim() === ORIGINAL_PLACEHOLDER) {
+        element.textContent = '';
+      }
+    });
+
+    element.addEventListener('blur', () => {
+      const typedPrompt = (element.textContent || '').trim();
+      renderOriginalPrompt(typedPrompt);
+    });
+
+    element.addEventListener('input', () => {
+      const typedPrompt = (element.textContent || '').trim();
+      renderOriginalPrompt(typedPrompt);
+    });
+
+    element.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.shiftKey) return;
+      event.preventDefault();
+      analyzeFromChosenSource();
+    });
+  });
 
   launcher.addEventListener('click', () => openPanel());
   overlay.addEventListener('click', closePanel);
