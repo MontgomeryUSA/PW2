@@ -1,0 +1,53 @@
+{
+    "name": "Promptwise",
+    "description": "Promptwise is a tool designed to help students write better prompts that encouraging learning rather than relying on AI to do the work for them.",
+    "version": "1.0",
+    "manifest_version": 3,
+    "icons": {
+        "16": "graphics/button.png",
+        "32": "graphics/button.png",
+        "48": "graphics/button.png",
+        "128": "graphics/button.png"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "permissions": [
+        "storage"
+    ],
+    "host_permissions": [
+        "https://api.openai.com/*"
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://chatgpt.com/*",
+                "https://chat.openai.com/*",
+                "https://claude.ai/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "graphics/*",
+                "fonts/*"
+            ],
+            "matches": [
+                "https://chatgpt.com/*",
+                "https://chat.openai.com/*",
+                "https://claude.ai/*"
+            ]
+        }
+    ]
+}
