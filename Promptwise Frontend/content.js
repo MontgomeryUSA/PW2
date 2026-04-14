@@ -447,6 +447,13 @@
   const originalDisplays = Array.from(root.querySelectorAll('[data-display="original"]'));
   const copyImage = copy.querySelector('.copyPhoto');
   const ORIGINAL_PLACEHOLDER = 'Paste your prompt here...';
+  const WEBSITE_PROMPT_SELECTORS = [
+    '#prompt-textarea',
+    'textarea[data-id]',
+    'form textarea',
+    'main textarea',
+    "div[contenteditable='true']",
+  ];
 
   function getOutputValue() {
     return (output.textContent || '').trim();
@@ -596,7 +603,7 @@
   }
 
   function getPromptComposer() {
-    const textArea = document.querySelector('#prompt-textarea, textarea[data-id], form textarea, main textarea');
+    const textArea = document.querySelector(WEBSITE_PROMPT_SELECTORS.slice(0, 4).join(', '));
     if (textArea) {
       return {
         el: textArea,
@@ -608,7 +615,7 @@
       };
     }
 
-    const editable = document.querySelector("div[contenteditable='true']");
+    const editable = document.querySelector(WEBSITE_PROMPT_SELECTORS[4]);
     if (editable) {
       return {
         el: editable,
@@ -707,7 +714,7 @@
   async function analyzeFromChosenSource() {
     const composer = getPromptComposer();
     const websitePrompt = composer?.getValue().trim() || '';
-    const prompt = state.autoInterceptEnabled && websitePrompt ? websitePrompt : getOriginalPromptValue();
+    const prompt = state.autoInterceptEnabled ? websitePrompt : getOriginalPromptValue();
     if (!prompt) return;
 
     try {
@@ -720,7 +727,7 @@
       const { rewrittenPrompt } = await runAnalysis(prompt);
       if (!rewrittenPrompt) throw new Error('No improved prompt returned.');
       showFeedback(
-        state.autoInterceptEnabled && websitePrompt
+        state.autoInterceptEnabled
           ? 'Improved prompt generated from the website prompt box.'
           : 'Improved prompt generated from Promptwise input.',
         true
@@ -865,6 +872,19 @@
       copyImage.alt = 'Copy';
     }, 900);
   });
+
+  document.addEventListener(
+    'input',
+    (event) => {
+      if (!state.autoInterceptEnabled) return;
+      const composer = getPromptComposer();
+      if (!composer) return;
+      if (event.target !== composer.el && !composer.el.contains?.(event.target)) return;
+      const websitePrompt = composer.getValue().trim();
+      renderOriginalPrompt(websitePrompt);
+    },
+    true
+  );
 
   document.addEventListener(
     'keydown',
