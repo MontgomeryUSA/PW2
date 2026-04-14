@@ -42,6 +42,8 @@
     autoImproving: false,
     autoInterceptEnabled: true,
     lastImprovedPrompt: '',
+    latestComposerText: '',
+    observedInputBox: null,
   };
   const PANEL_ANIMATION_MS = 180;
 
@@ -447,12 +449,13 @@
   const originalDisplays = Array.from(root.querySelectorAll('[data-display="original"]'));
   const copyImage = copy.querySelector('.copyPhoto');
   const ORIGINAL_PLACEHOLDER = 'Paste your prompt here...';
+  const CONTENT_EDITABLE_SELECTOR = '[contenteditable="true"]';
   const WEBSITE_PROMPT_SELECTORS = [
     '#prompt-textarea',
     'textarea[data-id]',
     'form textarea',
     'main textarea',
-    "div[contenteditable='true']",
+    `div${CONTENT_EDITABLE_SELECTOR}`,
   ];
 
   function getOutputValue() {
@@ -523,6 +526,32 @@
     });
   }
 
+  function syncOriginalPromptFromWebsiteText(text) {
+    const trimmed = (text || '').trim();
+    state.latestComposerText = trimmed;
+    if (!trimmed) return;
+    renderOriginalPrompt(trimmed);
+  }
+
+  function watchContentEditableInputBox() {
+    const nextInputBox = document.querySelector(CONTENT_EDITABLE_SELECTOR);
+    if (!nextInputBox || nextInputBox === state.observedInputBox) return;
+
+    if (state.observedInputBox) {
+      state.observedInputBox.removeEventListener('input', handleObservedInput);
+    }
+
+    state.observedInputBox = nextInputBox;
+    state.observedInputBox.addEventListener('input', handleObservedInput);
+  }
+
+  function handleObservedInput() {
+    if (!state.observedInputBox) return;
+    const text = state.observedInputBox.innerText || '';
+    console.log('📝 Current input:', text);
+    syncOriginalPromptFromWebsiteText(text);
+  }
+
   function renderRewrittenPrompt(value, fallback = 'Improved prompt appears here...') {
     setDisplay('rewritten', value.trim() || fallback);
   }
@@ -577,7 +606,9 @@
 
   function openPanel(layout = state.activeLayout) {
     state.activeLayout = layout;
+    watchContentEditableInputBox();
     seedPromptFromComposer(false);
+    syncOriginalPromptFromWebsiteText(state.latestComposerText);
     syncAutoToggleUi();
     hideMenus();
     overlay.classList.remove('pw-closing');
@@ -643,7 +674,7 @@
 
     const value = composer.getValue().trim();
     if (!value) return;
-    renderOriginalPrompt(value);
+    syncOriginalPromptFromWebsiteText(value);
   }
 
   function applyAnalysis(parsed) {
@@ -788,6 +819,8 @@
     }
   }
 
+  watchContentEditableInputBox();
+
   resetMetrics();
   originalDisplays.forEach((element) => {
     element.setAttribute('contenteditable', 'plaintext-only');
@@ -876,12 +909,12 @@
   document.addEventListener(
     'input',
     (event) => {
-      if (!state.autoInterceptEnabled) return;
+      watchContentEditableInputBox();
       const composer = getPromptComposer();
       if (!composer) return;
       if (event.target !== composer.el && !composer.el.contains?.(event.target)) return;
       const websitePrompt = composer.getValue().trim();
-      renderOriginalPrompt(websitePrompt);
+      syncOriginalPromptFromWebsiteText(websitePrompt);
     },
     true
   );
