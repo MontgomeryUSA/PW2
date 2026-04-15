@@ -539,8 +539,7 @@
     if (!trimmed) return;
     renderOriginalPrompt(trimmed);
   }
-
-  // ─── AUTOFILL ────────────────────────────────────────────────────────────────
+  
   // Pushes text into the page's prompt input box (textarea or contenteditable).
   // Called automatically after analysis completes so the improved prompt lands
   // in the composer without the user needing to click Apply.
@@ -550,7 +549,6 @@
     if (!composer) return;
     composer.setValue(text.trim());
   }
-  // ─────────────────────────────────────────────────────────────────────────────
 
   function imageSignature(dataUrl) {
     return `${dataUrl.slice(0, 96)}::${dataUrl.length}`;
@@ -917,13 +915,11 @@
     setOutputValue(rewrittenPrompt);
     renderRewrittenPrompt(rewrittenPrompt);
     setActionState(false);
-
-    // ─── AUTOFILL: push improved prompt into the page's input box automatically ─
+    
     if (rewrittenPrompt) {
       autofillPageInputBox(rewrittenPrompt);
       state.lastImprovedPrompt = rewrittenPrompt;
     }
-    // ──────────────────────────────────────────────────────────────────────────
 
     return { rewrittenPrompt };
   }
