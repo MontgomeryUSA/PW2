@@ -596,6 +596,15 @@
     layoutMenus.forEach((menu) => menu.classList.add('pw-hidden'));
   }
 
+  function isAnalysisEnter(event) {
+    if (event.defaultPrevented) return false;
+    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (event.isComposing) return false;
+    const key = event.key || '';
+    const code = event.code || '';
+    return key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
+  }
+
   function showActivePanel() {
     Object.values(panelMap).forEach((panel) => {
       panel.classList.remove('pw-closing');
@@ -850,11 +859,26 @@
     });
 
     element.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' || event.shiftKey) return;
+      if (!isAnalysisEnter(event)) return;
       event.preventDefault();
       analyzeFromChosenSource();
     });
   });
+
+  root.addEventListener(
+    'keydown',
+    (event) => {
+      if (!isAnalysisEnter(event)) return;
+      if (overlay.classList.contains('pw-hidden')) return;
+
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || !target.closest('.pw-panel')) return;
+
+      event.preventDefault();
+      analyzeFromChosenSource();
+    },
+    true
+  );
 
   launcher.addEventListener('click', () => openPanel());
   overlay.addEventListener('click', closePanel);
@@ -927,7 +951,7 @@
         return;
       }
 
-      if (event.key !== 'Enter' || event.shiftKey) return;
+      if (!isAnalysisEnter(event)) return;
 
       const composer = getPromptComposer();
       if (!composer) return;
