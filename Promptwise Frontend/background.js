@@ -82,7 +82,8 @@ async function analyzePrompt(userPrompt) {
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI request failed (${response.status})`);
+  const errorText = await response.text();
+  throw new Error(`OpenAI request failed (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
@@ -101,6 +102,7 @@ async function extractPromptFromImage(imageDataUrl) {
   }
 
   const OPENAI_API_KEY = await getApiKey();
+
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -112,19 +114,20 @@ async function extractPromptFromImage(imageDataUrl) {
       messages: [
         {
           role: "system",
-          content:
-            "Extract the assignment/problem text from the image. Return plain text only. No commentary.",
+          content: "Extract the assignment/problem text from the image. Return plain text only. No commentary.",
         },
         {
           role: "user",
           content: [
             {
-              type: "input_text",
+              type: "text",
               text: "Read this image and transcribe only the prompt/problem text as clean plain text.",
             },
             {
-              type: "input_image",
-              image_url: imageDataUrl,
+              type: "image_url",
+              image_url: {
+                url: imageDataUrl,
+              },
             },
           ],
         },
@@ -135,10 +138,13 @@ async function extractPromptFromImage(imageDataUrl) {
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI request failed (${response.status})`);
+    const errorText = await response.text();
+    throw new Error(`OpenAI request failed (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
+  console.log("Image extraction response:", data);
+
   const raw = data?.choices?.[0]?.message?.content;
   if (!raw) {
     throw new Error("No image extraction content returned by model.");
