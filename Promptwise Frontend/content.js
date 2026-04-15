@@ -43,6 +43,12 @@
     autoInterceptEnabled: true,
     lastImprovedPrompt: '',
     latestComposerText: '',
+    latestComposerImageDataUrl: '',
+    hasComposerImage: false,
+    extractedImageText: '',
+    userRewroteAfterImage: false,
+    lastExtractedImageSignature: '',
+    imageExtractionInFlight: false,
     observedInputBox: null,
   };
   const PANEL_ANIMATION_MS = 180;
@@ -450,6 +456,7 @@
   const copyImage = copy.querySelector('.copyPhoto');
   const ORIGINAL_PLACEHOLDER = 'Paste your prompt here...';
   const CONTENT_EDITABLE_SELECTOR = '[contenteditable="true"]';
+  const IMAGE_STORAGE_KEY = 'PW_LAST_COMPOSER_IMAGE';
   const WEBSITE_PROMPT_SELECTORS = [
     '#prompt-textarea',
     'textarea[data-id]',
@@ -533,6 +540,187 @@
     renderOriginalPrompt(trimmed);
   }
 
+  function imageSignature(dataUrl) {
+    return `${dataUrl.slice(0, 96)}::${dataUrl.length}`;
+  }
+
+  function toDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => reject(new Error('Could not read uploaded image.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function rememberComposerImage(dataUrl, origin) {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return;
+    const isNewImage = state.latestComposerImageDataUrl !== dataUrl;
+    state.latestComposerImageDataUrl = dataUrl;
+    state.hasComposerImage = true;
+    if (isNewImage) {
+      state.userRewroteAfterImage = false;
+      state.extractedImageText = '';
+      state.lastExtractedImageSignature = '';
+    }
+
+    try {
+      await chrome.storage.local.set({
+        [IMAGE_STORAGE_KEY]: {
+          dataUrl,
+          origin,
+          href: location.href,
+          savedAt: Date.now(),
+        },
+      });
+    } catch (error) {
+      console.warn('Promptwise could not persist image capture.', error);
+    }
+  }
+
+  async function hydrateComposerImageFromStorage() {
+    try {
+      const stored = (await chrome.storage.local.get([IMAGE_STORAGE_KEY]))?.[IMAGE_STORAGE_KEY];
+      if (!stored?.dataUrl || typeof stored.dataUrl !== 'string') return;
+      await rememberComposerImage(stored.dataUrl, 'storage');
+    } catch (error) {
+      console.warn('Promptwise could not read stored image capture.', error);
+    }
+  }
+
+  async function maybeExtractPromptFromImage() {
+    if (!state.hasComposerImage || !state.latestComposerImageDataUrl) return;
+    if (state.imageExtractionInFlight) return;
+
+    const signature = imageSignature(state.latestComposerImageDataUrl);
+    if (signature === state.lastExtractedImageSignature && state.extractedImageText) return;
+
+    state.imageExtractionInFlight = true;
+    showFeedback('Image detected. Extracting text from the prompt image...', true);
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'EXTRACT_PROMPT_FROM_IMAGE',
+        imageDataUrl: state.latestComposerImageDataUrl,
+      });
+      if (!response?.ok) throw new Error(response?.error || 'Could not read prompt text from image.');
+
+      const extractedText = (response.payload || '').trim();
+      if (!extractedText) throw new Error('Image text extraction returned empty content.');
+
+      state.extractedImageText = extractedText;
+      state.lastExtractedImageSignature = signature;
+      renderOriginalPrompt(extractedText);
+      showFeedback(
+        'Image prompt detected. Review and rewrite the extracted text in Promptwise, then run analysis.',
+        true
+      );
+    } catch (error) {
+      showFeedback(error.message || 'Could not extract text from image prompt.', true);
+    } finally {
+      state.imageExtractionInFlight = false;
+    }
+  }
+
+  async function ensureImageReadyForAnalysis() {
+    await scanComposerForInlineImage();
+    await hydrateComposerImageFromStorage();
+
+    if (!state.hasComposerImage || !state.latestComposerImageDataUrl) return true;
+
+    const signature = imageSignature(state.latestComposerImageDataUrl);
+    const needsExtraction =
+      !state.extractedImageText || state.lastExtractedImageSignature !== signature;
+
+    if (needsExtraction) {
+      await maybeExtractPromptFromImage();
+      return false;
+    }
+
+    if (!state.userRewroteAfterImage) {
+      showFeedback('Rewrite the extracted image text in Promptwise before running analysis.', true);
+      return false;
+    }
+
+    return true;
+  }
+
+  async function scanComposerForInlineImage() {
+    const composer = getPromptComposer();
+    if (!composer?.el) return false;
+
+    const imageEl = composer.el.querySelector?.('img');
+    const src = imageEl?.getAttribute('src') || '';
+    if (!src) return false;
+
+    if (src.startsWith('data:image/')) {
+      await rememberComposerImage(src, 'inline_image');
+      return true;
+    }
+
+    try {
+      const response = await fetch(src);
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) return false;
+      const file = new File([blob], 'prompt-image', { type: blob.type });
+      const dataUrl = await toDataUrl(file);
+      await rememberComposerImage(dataUrl, 'inline_image');
+      return true;
+    } catch (error) {
+      console.warn('Promptwise could not resolve inline image source.', error);
+      return false;
+    }
+  }
+
+  function startImageCaptureWatchers() {
+    const seenFiles = new WeakSet();
+    const captureFile = async (file, origin) => {
+      if (!(file instanceof File)) return;
+      if (!file.type.startsWith('image/')) return;
+      if (seenFiles.has(file)) return;
+      seenFiles.add(file);
+
+      try {
+        const dataUrl = await toDataUrl(file);
+        await rememberComposerImage(dataUrl, origin);
+      } catch (error) {
+        console.warn('Promptwise could not capture dropped/pasted image.', error);
+      }
+    };
+
+    document.addEventListener(
+      'change',
+      (event) => {
+        const element = event.target;
+        if (!(element instanceof HTMLInputElement) || element.type !== 'file' || !element.files?.length) return;
+        Array.from(element.files).forEach((file) => captureFile(file, 'file_input'));
+      },
+      true
+    );
+
+    document.addEventListener(
+      'paste',
+      (event) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        items.forEach((item) => {
+          if (!item.type.startsWith('image/')) return;
+          const file = item.getAsFile();
+          if (file) captureFile(file, 'paste');
+        });
+      },
+      true
+    );
+
+    document.addEventListener(
+      'drop',
+      (event) => {
+        const files = Array.from(event.dataTransfer?.files || []);
+        files.forEach((file) => captureFile(file, 'drop'));
+      },
+      true
+    );
+  }
+
   function watchContentEditableInputBox() {
     const nextInputBox = document.querySelector(CONTENT_EDITABLE_SELECTOR);
     if (!nextInputBox || nextInputBox === state.observedInputBox) return;
@@ -604,10 +792,12 @@
     (panelMap[state.activeLayout] || panelMap.fullscreen).classList.remove('pw-hidden');
   }
 
-  function openPanel(layout = state.activeLayout) {
+  async function openPanel(layout = state.activeLayout) {
     state.activeLayout = layout;
     watchContentEditableInputBox();
     seedPromptFromComposer(false);
+    await scanComposerForInlineImage();
+    await hydrateComposerImageFromStorage();
     syncOriginalPromptFromWebsiteText(state.latestComposerText);
     syncAutoToggleUi();
     hideMenus();
@@ -743,9 +933,16 @@
   }
 
   async function analyzeFromChosenSource() {
+    const imageReady = await ensureImageReadyForAnalysis();
+    if (!imageReady) return;
+
     const composer = getPromptComposer();
     const websitePrompt = composer?.getValue().trim() || '';
-    const prompt = state.autoInterceptEnabled ? websitePrompt : getOriginalPromptValue();
+    const prompt = state.hasComposerImage
+      ? getOriginalPromptValue()
+      : state.autoInterceptEnabled
+        ? websitePrompt
+        : getOriginalPromptValue();
     if (!prompt) return;
 
     try {
@@ -779,6 +976,13 @@
 
     const prompt = composer.getValue().trim();
     if (!prompt) return;
+
+    const imageReady = await ensureImageReadyForAnalysis();
+    if (!imageReady) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     if (state.autoImproving) {
       event.preventDefault();
@@ -820,6 +1024,8 @@
   }
 
   watchContentEditableInputBox();
+  startImageCaptureWatchers();
+  hydrateComposerImageFromStorage();
 
   resetMetrics();
   originalDisplays.forEach((element) => {
@@ -847,6 +1053,10 @@
     element.addEventListener('input', () => {
       const typedPrompt = (element.textContent || '').trim();
       renderOriginalPrompt(typedPrompt);
+      if (state.hasComposerImage) {
+        state.userRewroteAfterImage =
+          typedPrompt.length > 0 && typedPrompt !== (state.extractedImageText || '').trim();
+      }
     });
 
     element.addEventListener('keydown', (event) => {
@@ -915,6 +1125,7 @@
       if (event.target !== composer.el && !composer.el.contains?.(event.target)) return;
       const websitePrompt = composer.getValue().trim();
       syncOriginalPromptFromWebsiteText(websitePrompt);
+      scanComposerForInlineImage();
     },
     true
   );
