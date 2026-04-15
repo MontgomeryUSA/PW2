@@ -533,6 +533,24 @@
     });
   }
 
+  // Like renderOriginalPrompt but always writes, even if the element has focus.
+  // Used after image extraction so the text always appears in the bar.
+  function forceRenderOriginalPrompt(value, fallback = ORIGINAL_PLACEHOLDER) {
+    const safeValue = value.trim() || fallback;
+    root.querySelectorAll('[data-display="original"]').forEach((element) => {
+      element.textContent = safeValue;
+      // Move cursor to end so the user can keep editing naturally.
+      if (element === document.activeElement && element.isContentEditable) {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    });
+  }
+
   function syncOriginalPromptFromWebsiteText(text) {
     const trimmed = (text || '').trim();
     state.latestComposerText = trimmed;
@@ -621,10 +639,8 @@
       state.extractedImageText = extractedText;
       state.lastExtractedImageSignature = signature;
 
-      // Show extracted text in the Promptwise panel only.
-      // The page input box is NOT touched here — it will be filled once
-      // analysis produces the rewritten prompt via autofillPageInputBox().
-      renderOriginalPrompt(extractedText);
+      // Force-write into the Promptwise Original Prompt bar regardless of focus state.
+      forceRenderOriginalPrompt(extractedText);
 
       // FIX: mark ready immediately after extraction so that Enter from the
       // Promptwise panel works right away without requiring a manual retype.
@@ -869,9 +885,27 @@
       getValue: () => editable.innerText || '',
       setValue: (value) => {
         editable.focus();
-        editable.textContent = '';
-        document.execCommand('insertText', false, value);
-        editable.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // Select all existing content so the insert replaces it cleanly.
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editable);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Use DataTransfer-backed insertText so React/Vue synthetic event
+        // listeners see a real native input event and update their state.
+        const dt = new DataTransfer();
+        dt.setData('text/plain', value);
+        editable.dispatchEvent(new InputEvent('beforeinput', {
+          bubbles: true, cancelable: true,
+          inputType: 'insertFromPaste', dataTransfer: dt,
+        }));
+        // Fallback: directly set content and fire input so the framework picks it up.
+        editable.textContent = value;
+        editable.dispatchEvent(new InputEvent('input', {
+          bubbles: true, cancelable: false, inputType: 'insertText', data: value,
+        }));
       },
     };
   }
@@ -949,13 +983,16 @@
 
     const composer = getPromptComposer();
     if (!composer) {
-      showFeedback('Open a supported prompt box first so Promptwise can apply the rewrite.', true);
+      showFeedback('Open a supported prompt box first so Promptwise can apply the rewrite.');
       return;
     }
 
     composer.setValue(rewrittenPrompt);
     state.lastImprovedPrompt = rewrittenPrompt;
-    showFeedback('Improved prompt applied to the page editor.', true);
+    // Update feedback text only — do NOT pass true here, which would call
+    // openPanel('fullscreen') → seedPromptFromComposer and potentially
+    // read back the old composer value before the new one has settled.
+    setDisplay('feedback', 'Improved prompt applied to the page editor.');
   }
 
   async function analyzeFromChosenSource() {
