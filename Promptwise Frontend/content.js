@@ -848,25 +848,38 @@
   }
 
   function getPromptComposer() {
-    const textArea = document.querySelector(WEBSITE_PROMPT_SELECTORS.slice(0, 4).join(', '));
-    if (textArea) {
-      return {
-        el: textArea,
-        getValue: () => textArea.value || '',
-          setValue: (value) => {
-            editable.focus();
+  const textArea = document.querySelector(WEBSITE_PROMPT_SELECTORS.slice(0, 4).join(', '));
+  
+  if (textArea) {
+    return {
+      el: textArea,
+      getValue: () => textArea.value || '',
+      setValue: (value) => {
+        textArea.focus();
+        textArea.value = value;
+        textArea.dispatchEvent(new Event('input', { bubbles: true }));
+      },
+    };
+  }
 
-          // Clear existing content
-            editable.textContent = "";
-        
-        // 🔥 Insert like real typing
-            document.execCommand("insertText", false, value);
+  const allEditables = Array.from(document.querySelectorAll(WEBSITE_PROMPT_SELECTORS[4]));
+  const editable = allEditables.find((el) => !root.contains(el)) || null;
 
-          // Fallback trigger
-            editable.dispatchEvent(new Event("input", { bubbles: true }));
-        },
-      };
-    }
+  if (editable) {
+    return {
+      el: editable,
+      getValue: () => editable.innerText || '',
+      setValue: (value) => {
+        editable.focus();
+        editable.textContent = "";
+        document.execCommand("insertText", false, value);
+        editable.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+    };
+  }
+
+  return null;
+}
 
     // Exclude Promptwise's own contenteditable elements from composer detection
     const allEditables = Array.from(document.querySelectorAll(WEBSITE_PROMPT_SELECTORS[4]));
