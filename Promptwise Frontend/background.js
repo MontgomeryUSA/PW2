@@ -3,25 +3,29 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request?.type === "ANALYZE_PROMPT") {
+    analyzePrompt(request.prompt)
+      .then((payload) => sendResponse({ ok: true, payload }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+
+    return true;
+  }
+
+  if (request?.type === "EXTRACT_PROMPT_FROM_IMAGE") {
+    extractPromptFromImage(request.imageDataUrl)
+      .then((payload) => sendResponse({ ok: true, payload }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+
+    return true;
+  }
+
   if (request?.type !== "ANALYZE_PROMPT") {
     return false;
   }
-
-  analyzePrompt(request.prompt)
-    .then((payload) => sendResponse({ ok: true, payload }))
-    .catch((error) => sendResponse({ ok: false, error: error.message }));
-
-  return true;
 });
 
 async function analyzePrompt(userPrompt) {
-  const { OPENAI_API_KEY } = await chrome.storage.sync.get(["OPENAI_API_KEY"]);
-
-  if (!OPENAI_API_KEY) {
-    throw new Error(
-      "Missing API key. Save OPENAI_API_KEY in chrome.storage.sync before using analysis."
-    );
-  }
+  const OPENAI_API_KEY = await getApiKey();
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -89,4 +93,67 @@ async function analyzePrompt(userPrompt) {
   }
 
   return raw;
+}
+
+async function extractPromptFromImage(imageDataUrl) {
+  if (typeof imageDataUrl !== "string" || !imageDataUrl.startsWith("data:image/")) {
+    throw new Error("Invalid image payload.");
+  }
+
+  const OPENAI_API_KEY = await getApiKey();
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Extract the assignment/problem text from the image. Return plain text only. No commentary.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "Read this image and transcribe only the prompt/problem text as clean plain text.",
+            },
+            {
+              type: "input_image",
+              image_url: imageDataUrl,
+            },
+          ],
+        },
+      ],
+      max_tokens: 400,
+      temperature: 0,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI request failed (${response.status})`);
+  }
+
+  const data = await response.json();
+  const raw = data?.choices?.[0]?.message?.content;
+  if (!raw) {
+    throw new Error("No image extraction content returned by model.");
+  }
+
+  return raw.trim();
+}
+
+async function getApiKey() {
+  const { OPENAI_API_KEY } = await chrome.storage.sync.get(["OPENAI_API_KEY"]);
+  if (!OPENAI_API_KEY) {
+    throw new Error(
+      "Missing API key. Save OPENAI_API_KEY in chrome.storage.sync before using analysis."
+    );
+  }
+
+  return OPENAI_API_KEY;
 }
