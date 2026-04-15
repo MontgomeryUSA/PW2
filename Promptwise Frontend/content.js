@@ -540,6 +540,18 @@
     renderOriginalPrompt(trimmed);
   }
 
+  // ─── AUTOFILL ────────────────────────────────────────────────────────────────
+  // Pushes text into the page's prompt input box (textarea or contenteditable).
+  // Called automatically after analysis completes so the improved prompt lands
+  // in the composer without the user needing to click Apply.
+  function autofillPageInputBox(text) {
+    if (!text || !text.trim()) return;
+    const composer = getPromptComposer();
+    if (!composer) return;
+    composer.setValue(text.trim());
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   function imageSignature(dataUrl) {
     return `${dataUrl.slice(0, 96)}::${dataUrl.length}`;
   }
@@ -610,9 +622,18 @@
 
       state.extractedImageText = extractedText;
       state.lastExtractedImageSignature = signature;
+
+      // Show extracted text in the Promptwise panel only.
+      // The page input box is NOT touched here — it will be filled once
+      // analysis produces the rewritten prompt via autofillPageInputBox().
       renderOriginalPrompt(extractedText);
+
+      // FIX: mark ready immediately after extraction so that Enter from the
+      // Promptwise panel works right away without requiring a manual retype.
+      state.userRewroteAfterImage = true;
+
       showFeedback(
-        'Image prompt detected. Review and rewrite the extracted text in Promptwise, then run analysis.',
+        'Image prompt extracted. Press Enter or run analysis to improve it.',
         true
       );
     } catch (error) {
@@ -634,14 +655,13 @@
 
     if (needsExtraction) {
       await maybeExtractPromptFromImage();
-      return false;
+      // maybeExtractPromptFromImage sets userRewroteAfterImage = true on success,
+      // so we can proceed directly to analysis if extraction succeeded.
+      return state.extractedImageText.length > 0;
     }
 
-    if (!state.userRewroteAfterImage) {
-      showFeedback('Rewrite the extracted image text in Promptwise before running analysis.', true);
-      return false;
-    }
-
+    // FIX: removed the old gate that blocked analysis unless the user had
+    // manually retyped the extracted text. Extraction alone is sufficient.
     return true;
   }
 
@@ -722,7 +742,11 @@
   }
 
   function watchContentEditableInputBox() {
-    const nextInputBox = document.querySelector(CONTENT_EDITABLE_SELECTOR);
+    // Exclude Promptwise's own [data-display="original"] contenteditable elements
+    // so we only observe the host page's input box.
+    const allEditables = Array.from(document.querySelectorAll(CONTENT_EDITABLE_SELECTOR));
+    const nextInputBox = allEditables.find((el) => !root.contains(el)) || null;
+
     if (!nextInputBox || nextInputBox === state.observedInputBox) return;
 
     if (state.observedInputBox) {
@@ -836,7 +860,10 @@
       };
     }
 
-    const editable = document.querySelector(WEBSITE_PROMPT_SELECTORS[4]);
+    // Exclude Promptwise's own contenteditable elements from composer detection
+    const allEditables = Array.from(document.querySelectorAll(WEBSITE_PROMPT_SELECTORS[4]));
+    const editable = allEditables.find((el) => !root.contains(el)) || null;
+
     if (editable) {
       return {
         el: editable,
@@ -894,6 +921,13 @@
     setOutputValue(rewrittenPrompt);
     renderRewrittenPrompt(rewrittenPrompt);
     setActionState(false);
+
+    // ─── AUTOFILL: push improved prompt into the page's input box automatically ─
+    if (rewrittenPrompt) {
+      autofillPageInputBox(rewrittenPrompt);
+      state.lastImprovedPrompt = rewrittenPrompt;
+    }
+    // ──────────────────────────────────────────────────────────────────────────
 
     return { rewrittenPrompt };
   }
@@ -1009,7 +1043,7 @@
       const { rewrittenPrompt } = await runAnalysis(prompt);
       if (!rewrittenPrompt) throw new Error('No improved prompt returned.');
 
-      composer.setValue(rewrittenPrompt);
+      // applyAnalysis already called autofillPageInputBox(); just update display.
       renderOriginalPrompt(rewrittenPrompt);
       state.lastImprovedPrompt = rewrittenPrompt;
       showFeedback('Prompt replaced with improved version. Press send again to continue.', true);
@@ -1062,6 +1096,9 @@
     element.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' || event.shiftKey) return;
       event.preventDefault();
+      // FIX: always allow Enter to trigger analysis from the Promptwise panel.
+      // ensureImageReadyForAnalysis() inside analyzeFromChosenSource() handles
+      // any remaining extraction work before proceeding.
       analyzeFromChosenSource();
     });
   });
@@ -1140,6 +1177,8 @@
 
       if (event.key !== 'Enter' || event.shiftKey) return;
 
+      // Only intercept Enter presses from the host page's composer,
+      // never from inside the Promptwise panel itself.
       const composer = getPromptComposer();
       if (!composer) return;
       if (composer.el !== event.target && !composer.el.contains?.(event.target)) return;
