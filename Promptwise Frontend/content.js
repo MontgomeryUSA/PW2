@@ -853,9 +853,17 @@
       return {
         el: textArea,
         getValue: () => textArea.value || '',
-        setValue: (value) => {
-          textArea.value = value;
-          textArea.dispatchEvent(new Event('input', { bubbles: true }));
+          setValue: (value) => {
+            editable.focus();
+
+          // Clear existing content
+            editable.textContent = "";
+        
+        // 🔥 Insert like real typing
+            document.execCommand("insertText", false, value);
+
+          // Fallback trigger
+            editable.dispatchEvent(new Event("input", { bubbles: true }));
         },
       };
     }
