@@ -188,7 +188,7 @@
           <div class="horizontalLayout5">
             <div class="box2">
               <div class="title3">Gemini</div>
-              <div class="smallText3">Description Here</div>
+              <div class="smallText3">A multimodal AI integrated with Google tools for productivity and large-scale tasks.</div>
 
               <div class="horizontalLayout4">
                 <div class="smallText4">Clarity</div>
@@ -203,7 +203,7 @@
 
             <div class="box3">
               <div class="title4">ChatGPT</div>
-              <div class="smallText">Description Here</div>
+              <div class="smallText">A versatile AI for writing, coding, and general problem-solving</div>
 
               <div class="horizontalLayout4">
                 <div class="smallText5">Clarity</div>
@@ -220,7 +220,7 @@
           <div class="horizontalLayout5">
             <div class="box4">
               <div class="title4">Perplexity</div>
-              <div class="smallText">Description Here</div>
+              <div class="smallText">An AI-powered search tool that provides real-time information with sources.</div>
 
               <div class="horizontalLayout4">
                 <div class="smallText5">Clarity</div>
@@ -235,7 +235,7 @@
 
             <div class="box3">
               <div class="title4">Claude</div>
-              <div class="smallText">Description Here</div>
+              <div class="smallText">An AI focused on deep reasoning and long-form, structured analysis</div>
 
               <div class="horizontalLayout4">
                 <div class="smallText5">Clarity</div>
