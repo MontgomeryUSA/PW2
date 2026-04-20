@@ -972,7 +972,7 @@
     return applyAnalysis(parsed);
   }
 
-  async function applyImprovedPrompt() {
+ async function applyImprovedPrompt() {
   const rewrittenPrompt = getOutputValue();
   if (!rewrittenPrompt) return;
 
@@ -982,57 +982,40 @@
     return;
   }
 
-  // Close the panel first
   closePanel();
 
-  // Wait for the close animation, then apply the prompt
   window.setTimeout(() => {
-    composer.setValue(rewrittenPrompt);
+    const el = composer.el;
+
+    if (el && el.matches?.('[contenteditable="true"]')) {
+      el.focus();
+
+      // Clear existing content
+      el.textContent = '';
+      el.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'deleteContentBackward'
+      }));
+
+      // Insert improved prompt
+      el.textContent = rewrittenPrompt;
+      el.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertText',
+        data: rewrittenPrompt
+      }));
+    } else {
+      composer.setValue(rewrittenPrompt);
+    }
+
     state.lastImprovedPrompt = rewrittenPrompt;
 
-    // Reopen the same layout after applying
     window.setTimeout(() => {
       openPanel(state.activeLayout);
       showFeedback('Improved prompt applied to the page editor.');
     }, 50);
   }, PANEL_ANIMATION_MS);
 }
-
-  async function analyzeFromChosenSource() {
-    const imageReady = await ensureImageReadyForAnalysis();
-    if (!imageReady) return;
-
-    const composer = getPromptComposer();
-    const websitePrompt = composer?.getValue().trim() || '';
-    const prompt = state.hasComposerImage
-      ? getOriginalPromptValue()
-      : state.autoInterceptEnabled
-        ? websitePrompt
-        : getOriginalPromptValue();
-    if (!prompt) return;
-
-    try {
-      renderOriginalPrompt(prompt);
-      setOutputValue('', 'Generating improved prompt...');
-      renderRewrittenPrompt('', 'Generating improved prompt...');
-      setActionState(true);
-      showFeedback('Generating improved prompt...', true);
-
-      const { rewrittenPrompt } = await runAnalysis(prompt);
-      if (!rewrittenPrompt) throw new Error('No improved prompt returned.');
-      showFeedback(
-        state.autoInterceptEnabled
-          ? 'Improved prompt generated from the website prompt box.'
-          : 'Improved prompt generated from Promptwise input.',
-        true
-      );
-    } catch (error) {
-      setOutputValue('');
-      renderRewrittenPrompt('');
-      setActionState(false);
-      showFeedback(error.message || 'Could not improve prompt.', true);
-    }
-  }
 
   async function interceptAndImprove(event) {
     if (!state.autoInterceptEnabled) return;
