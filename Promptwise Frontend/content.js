@@ -186,22 +186,22 @@
 
         <div class="wrapper3">
           <div class="horizontalLayout5">
-            <div class="box2">
-              <div class="title3">Gemini</div>
-              <div class="smallText3">A multimodal AI integrated with Google tools for productivity and large-scale tasks.</div>
+            <div class="box2 pw-model-card" data-model-card="score">
+              <div class="title4">Gemini</div>
+              <div class="smallText">A multimodal AI integrated with Google tools for productivity and large-scale tasks.</div>
 
               <div class="horizontalLayout4">
-                <div class="smallText4">Clarity</div>
-                <div class="smallText4" data-display="score">--/100</div>
+                <div class="smallText5">Clarity</div>
+                <div class="smallText5" data-display="score">--/100</div>
               </div>
               <div class="wrapper2">
-                <div class="progressBar4 pw-card-track">
-                  <div class="pw-card-fill pw-card-fill--light" data-progress="score"></div>
+                <div class="progressBar3 pw-card-track">
+                  <div class="pw-card-fill" data-progress="score"></div>
                 </div>
               </div>
             </div>
 
-            <div class="box3">
+            <div class="box3 pw-model-card" data-model-card="clarity">
               <div class="title4">ChatGPT</div>
               <div class="smallText">A versatile AI for writing, coding, and general problem-solving</div>
 
@@ -218,7 +218,7 @@
           </div>
 
           <div class="horizontalLayout5">
-            <div class="box4">
+            <div class="box4 pw-model-card" data-model-card="readiness">
               <div class="title4">Perplexity</div>
               <div class="smallText">An AI-powered search tool that provides real-time information with sources.</div>
 
@@ -233,7 +233,7 @@
               </div>
             </div>
 
-            <div class="box3">
+            <div class="box3 pw-model-card" data-model-card="quality">
               <div class="title4">Claude</div>
               <div class="smallText">An AI focused on deep reasoning and long-form, structured analysis</div>
 
@@ -453,6 +453,7 @@
   const autoToggles = Array.from(root.querySelectorAll('[data-auto-toggle]'));
   const layoutMenus = Array.from(root.querySelectorAll('[data-layout-menu]'));
   const originalDisplays = Array.from(root.querySelectorAll('[data-display="original"]'));
+  const modelCards = Array.from(root.querySelectorAll('[data-model-card]'));
   const copyImage = copy.querySelector('.copyPhoto');
   const ORIGINAL_PLACEHOLDER = 'Paste your prompt here...';
   const CONTENT_EDITABLE_SELECTOR = '[contenteditable="true"]';
@@ -479,20 +480,26 @@
 
   function scoreToGrade(score) {
     if (!Number.isFinite(score)) return '_';
-    if (score >= 9) return 'A';
-    if (score >= 8) return 'B';
-    if (score >= 7) return 'C';
-    if (score >= 6) return 'D';
+    if (score >= 90) return 'A';
+    if (score >= 80) return 'B';
+    if (score >= 70) return 'C';
+    if (score >= 60) return 'D';
     return 'F';
   }
 
   function scoreToTone(score) {
     if (!Number.isFinite(score)) return 'none';
-    if (score >= 9) return 'excellent';
-    if (score >= 8) return 'good';
-    if (score >= 7) return 'fair';
-    if (score >= 6) return 'warning';
+    if (score >= 90) return 'excellent';
+    if (score >= 80) return 'good';
+    if (score >= 70) return 'fair';
+    if (score >= 60) return 'warning';
     return 'critical';
+  }
+
+  function normalizeScoreToHundred(score) {
+    if (!Number.isFinite(score)) return NaN;
+    if (score <= 10) return clamp(Math.round(score * 10), 1, 100);
+    return clamp(Math.round(score), 1, 100);
   }
 
   function setDisplay(role, text) {
@@ -511,6 +518,22 @@
   function setGradeTone(tone) {
     root.querySelectorAll('[data-display="grade"]').forEach((element) => {
       element.dataset.tone = tone;
+    });
+  }
+
+  function setTopModelHighlight(metricValues = {}) {
+    const rankedValues = Object.entries(metricValues).filter(([, value]) => Number.isFinite(value));
+    if (!rankedValues.length) {
+      modelCards.forEach((card) => card.classList.remove('pw-model-card--highlight'));
+      return;
+    }
+
+    const maxValue = Math.max(...rankedValues.map(([, value]) => value));
+    modelCards.forEach((card) => {
+      const role = card.dataset.modelCard;
+      const cardValue = metricValues[role];
+      const isTop = Number.isFinite(cardValue) && cardValue === maxValue;
+      card.classList.toggle('pw-model-card--highlight', isTop);
     });
   }
 
@@ -801,6 +824,7 @@
     setProgress('clarity', 0);
     setProgress('quality', 0);
     setProgress('readiness', 0);
+    setTopModelHighlight();
   }
 
   function syncAutoToggleUi() {
@@ -925,9 +949,9 @@
   function applyAnalysis(parsed) {
     const rawScore = Number(parsed.score);
     const hasScore = Number.isFinite(rawScore);
-    const safeScore = hasScore ? clamp(Math.round(rawScore), 1, 10) : NaN;
+    const safeScore = hasScore ? normalizeScoreToHundred(rawScore) : NaN;
     const safeClarity = clamp(Math.round(Number(parsed.clarity) || 0), 0, 100);
-    const quality = hasScore ? safeScore * 10 : 0;
+    const quality = hasScore ? safeScore : 0;
     const readiness = hasScore ? Math.round((quality + safeClarity) / 2) : safeClarity;
     const feedback = typeof parsed.feedback === 'string' && parsed.feedback.trim()
       ? parsed.feedback.trim()
@@ -935,7 +959,7 @@
     const rewrittenPrompt = typeof parsed.new_prompt === 'string' ? parsed.new_prompt.trim() : '';
 
     setDisplay('grade', scoreToGrade(safeScore));
-    setDisplay('score', hasScore ? `${safeScore}/10` : '--/10');
+    setDisplay('score', hasScore ? `${safeScore}/100` : '--/100');
     setDisplay('clarity', `${safeClarity}/100`);
     setDisplay('quality', hasScore ? `${quality}/100` : '--/100');
     setDisplay('readiness', `${readiness}/100`);
@@ -945,6 +969,12 @@
     setProgress('clarity', safeClarity);
     setProgress('quality', quality);
     setProgress('readiness', readiness);
+    setTopModelHighlight({
+      score: safeScore,
+      clarity: safeClarity,
+      quality,
+      readiness,
+    });
 
     setOutputValue(rewrittenPrompt);
     renderRewrittenPrompt(rewrittenPrompt);
