@@ -1114,7 +1114,12 @@
       // FIX: always allow Enter to trigger analysis from the Promptwise panel.
       // ensureImageReadyForAnalysis() inside analyzeFromChosenSource() handles
       // any remaining extraction work before proceeding.
-      runAnalysis();
+     const prompt = getOriginalPromptValue();
+      if (prompt) {
+        runAnalysis(prompt).catch(err => {
+          showFeedback(err.message || 'Analysis failed.', true);
+        });
+      }
     });
   });
 
