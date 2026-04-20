@@ -38,7 +38,7 @@
   ];
 
   const state = {
-    activeLayout: 'fullscreen',
+    activeLayout: 'sidebar',
     autoImproving: false,
     autoInterceptEnabled: true,
     lastImprovedPrompt: '',
@@ -827,7 +827,7 @@
       panel.classList.remove('pw-closing');
       panel.classList.add('pw-hidden');
     });
-    (panelMap[state.activeLayout] || panelMap.fullscreen).classList.remove('pw-hidden');
+    (panelMap[state.activeLayout] || panelMap.sidebar).classList.remove('pw-hidden');
   }
 
   async function openPanel(layout = state.activeLayout) {
@@ -845,7 +845,7 @@
   }
 
   function closePanel() {
-    const activePanel = panelMap[state.activeLayout] || panelMap.fullscreen;
+    const activePanel = panelMap[state.activeLayout] || panelMap.sidebar;
     overlay.classList.remove('pw-hidden');
     overlay.classList.add('pw-closing');
     activePanel.classList.add('pw-closing');
@@ -949,11 +949,6 @@
     setOutputValue(rewrittenPrompt);
     renderRewrittenPrompt(rewrittenPrompt);
     setActionState(false);
-    
-    if (rewrittenPrompt) {
-      autofillPageInputBox(rewrittenPrompt);
-      state.lastImprovedPrompt = rewrittenPrompt;
-    }
 
     return { rewrittenPrompt };
   }
@@ -978,22 +973,30 @@
   }
 
   async function applyImprovedPrompt() {
-    const rewrittenPrompt = getOutputValue();
-    if (!rewrittenPrompt) return;
+  const rewrittenPrompt = getOutputValue();
+  if (!rewrittenPrompt) return;
 
-    const composer = getPromptComposer();
-    if (!composer) {
-      showFeedback('Open a supported prompt box first so Promptwise can apply the rewrite.');
-      return;
-    }
+  const composer = getPromptComposer();
+  if (!composer) {
+    showFeedback('Open a supported prompt box first so Promptwise can apply the rewrite.', true);
+    return;
+  }
 
+  // Close the panel first
+  closePanel();
+
+  // Wait for the close animation, then apply the prompt
+  window.setTimeout(() => {
     composer.setValue(rewrittenPrompt);
     state.lastImprovedPrompt = rewrittenPrompt;
-    // Update feedback text only — do NOT pass true here, which would call
-    // openPanel('fullscreen') → seedPromptFromComposer and potentially
-    // read back the old composer value before the new one has settled.
-    setDisplay('feedback', 'Improved prompt applied to the page editor.');
-  }
+
+    // Reopen the same layout after applying
+    window.setTimeout(() => {
+      openPanel(state.activeLayout);
+      showFeedback('Improved prompt applied to the page editor.');
+    }, 50);
+  }, PANEL_ANIMATION_MS);
+}
 
   async function analyzeFromChosenSource() {
     const imageReady = await ensureImageReadyForAnalysis();
