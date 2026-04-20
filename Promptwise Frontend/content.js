@@ -988,22 +988,22 @@
     const el = composer.el;
 
     if (el && el.matches?.('[contenteditable="true"]')) {
-      el.focus();
+  el.focus();
 
-      // Clear existing content
-      el.textContent = '';
-      el.dispatchEvent(new InputEvent('input', {
-        bubbles: true,
-        inputType: 'deleteContentBackward'
-      }));
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  selection.removeAllRanges();
+  selection.addRange(range);
 
-      // Insert improved prompt
-      el.textContent = rewrittenPrompt;
-      el.dispatchEvent(new InputEvent('input', {
-        bubbles: true,
-        inputType: 'insertText',
-        data: rewrittenPrompt
-      }));
+  document.execCommand('delete', false, null);
+  document.execCommand('insertText', false, rewrittenPrompt);
+
+  el.dispatchEvent(new InputEvent('input', {
+    bubbles: true,
+    inputType: 'insertText',
+    data: rewrittenPrompt
+  }));
     } else {
       composer.setValue(rewrittenPrompt);
     }
