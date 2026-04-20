@@ -627,6 +627,12 @@
     } catch (error) {
       console.warn('Promptwise could not persist image capture.', error);
     }
+
+    // Kick off OCR as soon as a new image is seen so image-only prompts
+    // work without waiting for a send interception path.
+    if (isNewImage) {
+      maybeExtractPromptFromImage();
+    }
   }
 
   async function hydrateComposerImageFromStorage() {
@@ -1144,12 +1150,19 @@
       // FIX: always allow Enter to trigger analysis from the Promptwise panel.
       // ensureImageReadyForAnalysis() inside analyzeFromChosenSource() handles
       // any remaining extraction work before proceeding.
-     const prompt = getOriginalPromptValue();
-      if (prompt) {
-        runAnalysis(prompt).catch(err => {
-          showFeedback(err.message || 'Analysis failed.', true);
-        });
-      }
+      const analyzeFromPanel = async () => {
+        const imageReady = await ensureImageReadyForAnalysis();
+        if (!imageReady) return;
+
+        const promptToAnalyze = getOriginalPromptValue() || (state.extractedImageText || '').trim();
+        if (!promptToAnalyze) return;
+
+        await runAnalysis(promptToAnalyze);
+      };
+
+      analyzeFromPanel().catch(err => {
+        showFeedback(err.message || 'Analysis failed.', true);
+      });
     });
   });
 
