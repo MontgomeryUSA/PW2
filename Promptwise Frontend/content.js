@@ -1114,7 +1114,7 @@
       // FIX: always allow Enter to trigger analysis from the Promptwise panel.
       // ensureImageReadyForAnalysis() inside analyzeFromChosenSource() handles
       // any remaining extraction work before proceeding.
-      analyzeFromChosenSource();
+      runAnalysis();
     });
   });
 
