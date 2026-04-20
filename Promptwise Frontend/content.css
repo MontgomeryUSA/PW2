@@ -497,13 +497,7 @@
     width: 156.6vh;
 }
 
-#pw-root .box2 {
-    border: 0.2vh solid #76bfda;
-    width: 78.3vh;
-    background-color: #304a7c;
-    box-sizing: border-box;
-}
-
+#pw-root .box2,
 #pw-root .box3,
 #pw-root .box4 {
     border: 0.2vh solid #304a7c;
@@ -516,14 +510,45 @@
     font-size: 4.05vh;
 }
 
+#pw-root .box2 .title4 {
+    font-size: 4.05vh;
+}
+
 #pw-root .box3 .smallText,
 #pw-root .box4 .smallText {
+    font-size: 1.8vh;
+}
+
+#pw-root .box2 .smallText {
     font-size: 1.8vh;
 }
 
 #pw-root .box3 .smallText5,
 #pw-root .box4 .smallText5 {
     font-size: 1.5vh;
+}
+
+#pw-root .box2 .smallText5 {
+    font-size: 1.5vh;
+}
+
+#pw-root .pw-model-card--highlight {
+    border-color: #76bfda;
+}
+
+#pw-root .pw-model-card--highlight .title4,
+#pw-root .pw-model-card--highlight .smallText,
+#pw-root .pw-model-card--highlight .smallText5 {
+    color: #76bfda;
+}
+
+#pw-root .pw-model-card--highlight .pw-card-track {
+    background-color: #76bfda;
+    border-color: #76bfda;
+}
+
+#pw-root .pw-model-card--highlight .pw-card-fill {
+    background-color: #304a7c;
 }
 
 #pw-root .wrapperButtons {
