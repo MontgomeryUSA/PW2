@@ -26,8 +26,8 @@
             "matches": [
                 "https://chatgpt.com/*",
                 "https://chat.openai.com/*",
-                "https://claude.ai/*"
-                "https://gemini.google.com/*"
+                "https://claude.ai/*",
+                "https://gemini.google.com/*",
                 "https://www.perplexity.ai/*"
             ],
             "js": [
@@ -48,8 +48,8 @@
             "matches": [
                 "https://chatgpt.com/*",
                 "https://chat.openai.com/*",
-                "https://claude.ai/*"
-                "https://gemini.google.com/*"
+                "https://claude.ai/*",
+                "https://gemini.google.com/*",
                 "https://www.perplexity.ai/*"
             ]
         }
